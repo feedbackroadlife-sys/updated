@@ -1,0 +1,1007 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, viewport-fit=cover">
+<meta name="theme-color" content="#3b82f6">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="LoopLive">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" type="image/png" sizes="96x96" href="/favicon-96x96.png">
+<link rel="icon" href="/favicon.ico" sizes="any">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<title>LoopLive - Timeline App</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+* {
+-webkit-tap-highlight-color: transparent;
+-webkit-touch-callout: none;
+-webkit-user-select: none;
+user-select: none;
+}
+input, textarea {
+-webkit-user-select: text;
+user-select: text;
+}
+body {
+overscroll-behavior: none;
+margin: 0;
+padding: 0;
+font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+#root {
+width: 100%;
+min-height: 100vh;
+overflow-x: hidden;
+}
+@keyframes pulse {
+0%, 100% { opacity: 1; }
+50% { opacity: 0.5; }
+}
+.animate-pulse { animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+
+/* Menu overlay */
+.menu-overlay {
+position: fixed;
+top: 0;
+left: -100%;
+width: 80%;
+max-width: 320px;
+height: 100vh;
+background: white;
+box-shadow: 2px 0 12px rgba(0,0,0,0.1);
+transition: left 0.3s ease;
+z-index: 1000;
+overflow-y: auto;
+}
+.menu-overlay.open {
+left: 0;
+}
+.menu-backdrop {
+position: fixed;
+top: 0;
+left: 0;
+width: 100%;
+height: 100vh;
+background: rgba(0,0,0,0.5);
+opacity: 0;
+pointer-events: none;
+transition: opacity 0.3s ease;
+z-index: 999;
+}
+.menu-backdrop.open {
+opacity: 1;
+pointer-events: all;
+}
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script>
+// Icons
+const MenuIcon = () => `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>`;
+const PlayIcon = () => `<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>`;
+const PauseIcon = () => `<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z"/></svg>`;
+const ResetIcon = () => `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M3 16v5h5"/></svg>`;
+const XIcon = () => `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>`;
+const PlusIcon = () => `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>`;
+const TrashIcon = () => `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>`;
+
+// Schedule shipped in v1.0 (used only to detect whether the user had customised it)
+const legacyDefaultTasks = [
+{ id: 1, name: 'Sleep', start: '00:00', end: '07:00', color: '#6366f1' },
+{ id: 2, name: 'Morning Routine', start: '07:00', end: '08:00', color: '#06b6d4' },
+{ id: 3, name: 'Work', start: '09:00', end: '12:00', color: '#3b82f6' },
+{ id: 4, name: 'Lunch Break', start: '12:00', end: '13:00', color: '#10b981' },
+{ id: 5, name: 'Work', start: '13:00', end: '17:00', color: '#3b82f6' },
+{ id: 6, name: 'Study', start: '18:00', end: '20:00', color: '#8b5cf6' },
+{ id: 7, name: 'Reading', start: '20:00', end: '21:30', color: '#f59e0b' },
+{ id: 8, name: 'Free Time', start: '21:30', end: '23:00', color: '#ec4899' }
+];
+
+const colors = ['#3b82f6', '#8b5cf6', '#10b981', '#f59e0b', '#ec4899', '#6366f1', '#06b6d4', '#ef4444'];
+
+// ---------- Helpers ----------
+const escapeHtml = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+// "Sunday, 09/20/2026"
+const formatDateLine = (d) => {
+const weekday = d.toLocaleDateString('en-US', { weekday: 'long' });
+const mm = String(d.getMonth() + 1).padStart(2, '0');
+const dd = String(d.getDate()).padStart(2, '0');
+return `${weekday}, ${mm}/${dd}/${d.getFullYear()}`;
+};
+
+// ---------- Presets ----------
+const PRESET_KEY = 'loopLivePresets';
+const PRESET_IDS = ['p1', 'p2'];
+const PRESET_TITLES = { p1: 'Preset 1', p2: 'Preset 2' };
+let uidSeq = 0;
+const uid = () => Date.now() + (uidSeq++);
+const blankTask = () => ({ name: '', start: '', end: '', color: '#3b82f6' });
+
+const exampleTasks = () => [
+{ id: uid(), name: 'Morning Routine', start: '07:00', end: '08:00', color: '#06b6d4' },
+{ id: uid(), name: 'Breakfast', start: '08:00', end: '09:00', color: '#f59e0b' },
+{ id: uid(), name: 'Apply for Jobs', start: '09:00', end: '12:00', color: '#3b82f6' }
+];
+
+const cleanTasks = (list) => list
+.filter((t) => t && typeof t.name === 'string' && /^\d{2}:\d{2}$/.test(t.start) && /^\d{2}:\d{2}$/.test(t.end))
+.map((t) => ({ id: Number(t.id) || uid(), name: t.name, start: t.start, end: t.end, color: typeof t.color === 'string' ? t.color : '#3b82f6' }));
+
+// Default: two example presets, neither one on.
+const makePresets = () => {
+let p1 = exampleTasks();
+// Keep a schedule the user customised in v1.0 (it becomes Preset 1, still off until they turn it on).
+try {
+const legacy = JSON.parse(localStorage.getItem('nowAppTasks'));
+if (Array.isArray(legacy) && legacy.length && JSON.stringify(legacy) !== JSON.stringify(legacyDefaultTasks)) {
+const cleaned = cleanTasks(legacy);
+if (cleaned.length) p1 = cleaned;
+}
+} catch (e) {}
+return { v: 2, updatedAt: 0, activeId: null, presets: { p1: { id: 'p1', tasks: p1 }, p2: { id: 'p2', tasks: exampleTasks() } } };
+};
+
+// Accepts anything (local storage or a Drive file) and returns a safe, complete structure.
+const normalizePresets = (data) => {
+const fresh = makePresets();
+const out = { v: 2, updatedAt: Number(data && data.updatedAt) || 0, activeId: null, presets: {} };
+PRESET_IDS.forEach((id) => {
+const src = data && data.presets && data.presets[id];
+out.presets[id] = src && Array.isArray(src.tasks) ? { id, tasks: cleanTasks(src.tasks) } : fresh.presets[id];
+});
+if (data && PRESET_IDS.includes(data.activeId)) out.activeId = data.activeId;
+return out;
+};
+
+const loadPresets = () => {
+try {
+const raw = localStorage.getItem(PRESET_KEY);
+if (raw) return normalizePresets(JSON.parse(raw));
+} catch (e) {}
+const fresh = makePresets();
+try { localStorage.setItem(PRESET_KEY, JSON.stringify(fresh)); } catch (e) {}
+return fresh;
+};
+
+const presetData = loadPresets();
+
+// App State
+const state = {
+data: presetData,
+newTasks: { p1: blankTask(), p2: blankTask() },
+view: 'dashboard',
+currentTime: new Date(),
+menuOpen: false,
+// Focus timer (25 min)
+focusTimer: {
+isRunning: false,
+remainingSeconds: parseInt(localStorage.getItem('focusRemaining')) || 25 * 60,
+totalSeconds: 25 * 60,
+completedCycles: parseInt(localStorage.getItem('focusCycles')) || 0
+},
+// Break timer (5 min)
+breakTimer: {
+isRunning: false,
+remainingSeconds: parseInt(localStorage.getItem('breakRemaining')) || 5 * 60,
+totalSeconds: 5 * 60,
+completedCycles: parseInt(localStorage.getItem('breakCycles')) || 0
+},
+// Input stability
+isTyping: false
+};
+
+// Save state
+// Tasks of the preset that is switched on (none when both are off)
+const activeTasks = () => (state.data.activeId ? state.data.presets[state.data.activeId].tasks : []);
+
+// Save presets locally, then (if Google Drive Sync is on) queue a backup
+const savePresets = () => {
+state.data.updatedAt = Date.now();
+try { localStorage.setItem(PRESET_KEY, JSON.stringify(state.data)); } catch (e) {}
+scheduleDrivePush();
+};
+
+// Timers only. Presets are saved separately by savePresets().
+const saveState = () => {
+localStorage.setItem('focusRemaining', state.focusTimer.remainingSeconds.toString());
+localStorage.setItem('breakRemaining', state.breakTimer.remainingSeconds.toString());
+localStorage.setItem('focusCycles', state.focusTimer.completedCycles.toString());
+localStorage.setItem('breakCycles', state.breakTimer.completedCycles.toString());
+};
+
+// Utility functions
+const timeToMinutes = (time) => {
+const [hours, minutes] = time.split(':').map(Number);
+return hours * 60 + minutes;
+};
+
+const formatTime = (seconds) => {
+const h = Math.floor(seconds / 3600);
+const m = Math.floor((seconds % 3600) / 60);
+const s = seconds % 60;
+return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+};
+
+const formatTimerDisplay = (seconds) => {
+const m = Math.floor(seconds / 60);
+const s = seconds % 60;
+return `${m}:${s.toString().padStart(2, '0')}`;
+};
+
+const getCurrentTask = () => {
+const now = state.currentTime.getHours() * 60 + state.currentTime.getMinutes();
+return activeTasks().find(task => {
+const start = timeToMinutes(task.start);
+const end = timeToMinutes(task.end);
+return now >= start && now < end;
+});
+};
+
+const getTimeLeftInTask = (task) => {
+if (!task) return null;
+const now = state.currentTime;
+const currentMinutes = now.getHours() * 60 + now.getMinutes();
+const currentSeconds = now.getSeconds();
+const endMinutes = timeToMinutes(task.end);
+const totalSecondsLeft = (endMinutes - currentMinutes) * 60 - currentSeconds;
+return Math.max(0, totalSecondsLeft);
+};
+
+// Menu functions
+window.toggleMenu = () => {
+state.menuOpen = !state.menuOpen;
+render();
+};
+
+window.navTo = (view) => {
+state.view = view;
+state.menuOpen = false;
+render();
+};
+
+// Timer functions
+window.toggleFocusTimer = () => {
+state.focusTimer.isRunning = !state.focusTimer.isRunning;
+if (state.focusTimer.isRunning && state.breakTimer.isRunning) {
+state.breakTimer.isRunning = false;
+}
+saveState();
+updateTimersOnly();
+};
+
+window.resetFocusTimer = () => {
+state.focusTimer.isRunning = false;
+state.focusTimer.remainingSeconds = state.focusTimer.totalSeconds;
+saveState();
+updateTimersOnly();
+};
+
+window.toggleBreakTimer = () => {
+state.breakTimer.isRunning = !state.breakTimer.isRunning;
+if (state.breakTimer.isRunning && state.focusTimer.isRunning) {
+state.focusTimer.isRunning = false;
+}
+saveState();
+updateTimersOnly();
+};
+
+window.resetBreakTimer = () => {
+state.breakTimer.isRunning = false;
+state.breakTimer.remainingSeconds = state.breakTimer.totalSeconds;
+saveState();
+updateTimersOnly();
+};
+
+// Preset on/off: only one preset can be on. Turning the one that is on off leaves none on.
+window.togglePreset = (pid) => {
+if (!state.data.presets[pid]) return;
+state.data.activeId = state.data.activeId === pid ? null : pid;
+savePresets();
+render();
+};
+
+// Task management (every task belongs to a preset: pid = 'p1' | 'p2')
+window.handleInputFocus = () => {
+state.isTyping = true;
+};
+
+window.handleInputBlur = () => {
+setTimeout(() => {
+state.isTyping = false;
+}, 100);
+};
+
+window.updateTaskSilent = (pid, id, field, value) => {
+const task = state.data.presets[pid].tasks.find(t => t.id === id);
+if (task) {
+task[field] = value;
+savePresets();
+}
+};
+
+window.updateTask = (pid, id, field, value) => {
+const task = state.data.presets[pid].tasks.find(t => t.id === id);
+if (task) {
+task[field] = value;
+savePresets();
+updateCircleOnly();
+if (field === 'color') render();
+}
+};
+
+window.deleteTask = (pid, id) => {
+const preset = state.data.presets[pid];
+preset.tasks = preset.tasks.filter(t => t.id !== id);
+savePresets();
+render();
+};
+
+window.addTask = (pid) => {
+const nt = state.newTasks[pid];
+if (nt.name && nt.start && nt.end) {
+const list = state.data.presets[pid].tasks;
+list.push({ ...nt, id: uid() });
+list.sort((a, b) => timeToMinutes(a.start) - timeToMinutes(b.start));
+state.newTasks[pid] = blankTask();
+savePresets();
+render();
+}
+};
+
+// Render circular timeline
+const renderCircularTimeline = () => {
+const currentTask = getCurrentTask();
+const timeLeft = currentTask ? getTimeLeftInTask(currentTask) : 0;
+const currentMinutes = state.currentTime.getHours() * 60 + state.currentTime.getMinutes() + state.currentTime.getSeconds() / 60;
+const currentAngle = (currentMinutes / 1440) * 360;
+
+const centerX = 200;
+const centerY = 200;
+const radius = 160;
+
+let svg = `<svg width="400" height="400" viewBox="0 0 400 400" style="max-width: 100%; height: auto;">`;
+
+// Track ring (visible even when no preset is on)
+svg += `<circle cx="${centerX}" cy="${centerY}" r="${radius}" stroke="#e2e8f0" stroke-width="12" fill="none"/>`;
+
+// Draw task arcs
+activeTasks().forEach(task => {
+const startMinutes = timeToMinutes(task.start);
+const endMinutes = timeToMinutes(task.end);
+const startAngle = (startMinutes / 1440) * 360 - 90;
+const endAngle = (endMinutes / 1440) * 360 - 90;
+
+const startRad = (startAngle * Math.PI) / 180;
+const endRad = (endAngle * Math.PI) / 180;
+
+const x1 = centerX + radius * Math.cos(startRad);
+const y1 = centerY + radius * Math.sin(startRad);
+const x2 = centerX + radius * Math.cos(endRad);
+const y2 = centerY + radius * Math.sin(endRad);
+
+const largeArcFlag = endAngle - startAngle > 180 ? 1 : 0;
+
+svg += `<path d="M ${x1} ${y1} A ${radius} ${radius} 0 ${largeArcFlag} 1 ${x2} ${y2}" 
+stroke="${task.color}" stroke-width="12" fill="none" stroke-linecap="round"/>`;
+});
+
+// Draw hour markers and labels
+for (let hour = 0; hour < 24; hour++) {
+const angle = (hour / 24) * 360 - 90;
+const rad = (angle * Math.PI) / 180;
+const innerRadius = radius - 20;
+const outerRadius = radius + 5;
+const labelRadius = radius + 25;
+
+const x1 = centerX + innerRadius * Math.cos(rad);
+const y1 = centerY + innerRadius * Math.sin(rad);
+const x2 = centerX + outerRadius * Math.cos(rad);
+const y2 = centerY + outerRadius * Math.sin(rad);
+const labelX = centerX + labelRadius * Math.cos(rad);
+const labelY = centerY + labelRadius * Math.sin(rad);
+
+// Hour markers
+svg += `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="#94a3b8" stroke-width="2"/>`;
+
+// Hour labels
+svg += `<text x="${labelX}" y="${labelY}" text-anchor="middle" dominant-baseline="middle" fill="#64748b" font-size="12" font-weight="600">${hour}</text>`;
+}
+
+// Draw minute markers (every 5 minutes)
+for (let min = 0; min < 1440; min += 5) {
+if (min % 60 !== 0) { // Skip hour positions
+const angle = (min / 1440) * 360 - 90;
+const rad = (angle * Math.PI) / 180;
+const innerRadius = radius - 10;
+const outerRadius = radius + 5;
+
+const x1 = centerX + innerRadius * Math.cos(rad);
+const y1 = centerY + innerRadius * Math.sin(rad);
+const x2 = centerX + outerRadius * Math.cos(rad);
+const y2 = centerY + outerRadius * Math.sin(rad);
+
+svg += `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="#cbd5e1" stroke-width="1"/>`;
+}
+}
+
+// Draw current time indicator (red dot)
+const currentRad = ((currentAngle - 90) * Math.PI) / 180;
+const dotX = centerX + radius * Math.cos(currentRad);
+const dotY = centerY + radius * Math.sin(currentRad);
+
+svg += `<circle cx="${dotX}" cy="${dotY}" r="8" fill="#ef4444" class="animate-pulse"/>`;
+svg += `<circle cx="${dotX}" cy="${dotY}" r="4" fill="#fff"/>`;
+
+// Center text
+if (currentTask) {
+svg += `<text x="${centerX}" y="${centerY - 30}" text-anchor="middle" fill="#1e293b" font-size="20" font-weight="bold">${escapeHtml(currentTask.name)}</text>`;
+svg += `<text x="${centerX}" y="${centerY}" text-anchor="middle" fill="${currentTask.color}" font-size="32" font-weight="bold">${formatTime(timeLeft)}</text>`;
+svg += `<text x="${centerX}" y="${centerY + 25}" text-anchor="middle" fill="#64748b" font-size="14">remaining time</text>`;
+} else {
+svg += `<text x="${centerX}" y="${centerY}" text-anchor="middle" fill="#64748b" font-size="18">No active task</text>`;
+}
+
+svg += `</svg>`;
+return svg;
+};
+
+// Update only circle
+const updateCircleOnly = () => {
+const container = document.getElementById('circle-container');
+if (container && !state.isTyping) {
+container.innerHTML = renderCircularTimeline();
+}
+};
+
+// Update only timers
+const updateTimersOnly = () => {
+const focusEl = document.getElementById('focus-timer-content');
+const breakEl = document.getElementById('break-timer-content');
+
+if (focusEl) {
+const progress = ((state.focusTimer.totalSeconds - state.focusTimer.remainingSeconds) / state.focusTimer.totalSeconds) * 100;
+focusEl.innerHTML = `
+<div class="text-center mb-3">
+<div class="text-3xl font-bold ${state.focusTimer.isRunning ? 'text-blue-600' : 'text-slate-700'}">
+${formatTimerDisplay(state.focusTimer.remainingSeconds)}
+</div>
+<div class="text-xs text-slate-500 mt-1">Cycles: ${state.focusTimer.completedCycles}</div>
+</div>
+<div class="w-full bg-slate-200 rounded-full h-1.5 mb-3">
+<div class="bg-blue-500 h-1.5 rounded-full transition-all" style="width: ${progress}%"></div>
+</div>
+<div class="flex gap-2">
+<button onclick="toggleFocusTimer()" class="flex-1 py-2 rounded-lg text-sm font-medium transition-all ${state.focusTimer.isRunning ? 'bg-slate-200 hover:bg-slate-300 text-slate-800' : 'bg-blue-500 hover:bg-blue-600 text-white'} flex items-center justify-center gap-1">
+${state.focusTimer.isRunning ? PauseIcon() : PlayIcon()}
+</button>
+<button onclick="resetFocusTimer()" class="px-3 py-2 rounded-lg text-sm font-medium bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center">
+${ResetIcon()}
+</button>
+</div>
+`;
+}
+
+if (breakEl) {
+const progress = ((state.breakTimer.totalSeconds - state.breakTimer.remainingSeconds) / state.breakTimer.totalSeconds) * 100;
+breakEl.innerHTML = `
+<div class="text-center mb-3">
+<div class="text-3xl font-bold ${state.breakTimer.isRunning ? 'text-green-600' : 'text-slate-700'}">
+${formatTimerDisplay(state.breakTimer.remainingSeconds)}
+</div>
+<div class="text-xs text-slate-500 mt-1">Cycles: ${state.breakTimer.completedCycles}</div>
+</div>
+<div class="w-full bg-slate-200 rounded-full h-1.5 mb-3">
+<div class="bg-green-500 h-1.5 rounded-full transition-all" style="width: ${progress}%"></div>
+</div>
+<div class="flex gap-2">
+<button onclick="toggleBreakTimer()" class="flex-1 py-2 rounded-lg text-sm font-medium transition-all ${state.breakTimer.isRunning ? 'bg-slate-200 hover:bg-slate-300 text-slate-800' : 'bg-green-500 hover:bg-green-600 text-white'} flex items-center justify-center gap-1">
+${state.breakTimer.isRunning ? PauseIcon() : PlayIcon()}
+</button>
+<button onclick="resetBreakTimer()" class="px-3 py-2 rounded-lg text-sm font-medium bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center">
+${ResetIcon()}
+</button>
+</div>
+`;
+}
+};
+
+// ---------- Google Drive Sync (private app folder) ----------
+// 1) Create an OAuth "Web application" client ID in Google Cloud Console.
+// 2) Add your Netlify URL under "Authorized JavaScript origins".
+// 3) Paste the client ID below. It is public by design, not a secret.
+const GOOGLE_CLIENT_ID = 'PASTE_YOUR_CLIENT_ID.apps.googleusercontent.com';
+const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.appdata';
+const DRIVE_FILE = 'looplive-presets.json';
+const DRIVE_LINK_KEY = 'loopLiveDriveLinked';
+
+const driveConfigured = () => !GOOGLE_CLIENT_ID.startsWith('PASTE_');
+const driveLinked = () => { try { return localStorage.getItem(DRIVE_LINK_KEY) === '1'; } catch (e) { return false; } };
+const drive = { token: null, expiry: 0, fileId: null, status: 'off', message: '', lastSynced: null, timer: null, busy: false, again: false };
+
+const driveRowInner = () => {
+const linked = driveLinked();
+const st = drive.status;
+let sub;
+if (!linked) {
+sub = drive.message || (st === 'connecting' ? 'Connecting...' : st === 'not-configured' ? 'Not set up: add your Google Client ID in index.html' : 'Off');
+} else if (st === 'syncing') sub = 'On. Syncing...';
+else if (st === 'needs-signin') sub = 'Sign in again to keep syncing';
+else if (st === 'error') sub = 'On. Could not sync, will retry';
+else sub = drive.lastSynced ? 'On. Backed up at ' + drive.lastSynced.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'On';
+const signIn = linked && st === 'needs-signin' ? '<button onclick="connectDrive()" class="mt-1 text-xs text-blue-600 font-medium">Sign in again</button>' : '';
+return `<div class="flex items-center justify-between gap-3">
+<div class="min-w-0">
+<div class="font-medium text-slate-700">Google Drive Sync</div>
+<div class="text-xs text-slate-500 mt-0.5" aria-live="polite">${escapeHtml(sub)}</div>
+${signIn}
+</div>
+<button role="switch" aria-checked="${linked}" aria-label="Google Drive Sync" onclick="toggleDriveSync()"
+class="relative flex-none w-12 h-7 rounded-full transition-colors ${linked ? 'bg-blue-500' : 'bg-slate-300'}">
+<span class="absolute top-0.5 left-0.5 w-6 h-6 bg-white rounded-full shadow transition-transform ${linked ? 'translate-x-5' : ''}"></span>
+</button>
+</div>`;
+};
+
+const updateDriveUi = () => {
+const el = document.getElementById('drive-menu-item');
+if (el) el.innerHTML = driveRowInner();
+};
+
+const setDriveStatus = (status, message) => {
+drive.status = status;
+drive.message = message || '';
+updateDriveUi();
+};
+
+const loadGis = () => new Promise((resolve, reject) => {
+if (window.google && google.accounts && google.accounts.oauth2) return resolve();
+const el = document.createElement('script');
+el.src = 'https://accounts.google.com/gsi/client';
+el.async = true;
+el.onload = () => resolve();
+el.onerror = () => reject(new Error('offline'));
+document.head.appendChild(el);
+});
+
+// interactive=true shows Google's sign-in popup; false tries to reuse an earlier consent silently.
+const driveToken = async (interactive) => {
+if (drive.token && Date.now() < drive.expiry - 60000) return drive.token;
+await loadGis();
+return new Promise((resolve, reject) => {
+const client = google.accounts.oauth2.initTokenClient({
+client_id: GOOGLE_CLIENT_ID,
+scope: DRIVE_SCOPE,
+prompt: interactive ? '' : 'none',
+callback: (r) => {
+if (r.error) return reject(new Error(r.error));
+drive.token = r.access_token;
+drive.expiry = Date.now() + Number(r.expires_in) * 1000;
+resolve(drive.token);
+},
+error_callback: (e) => reject(new Error((e && e.type) || 'auth_error'))
+});
+client.requestAccessToken();
+});
+};
+
+const driveFetch = async (url, opts = {}) => {
+const token = await driveToken(false);
+const res = await fetch(url, { ...opts, headers: { ...(opts.headers || {}), Authorization: 'Bearer ' + token } });
+if (res.status === 401) { drive.token = null; throw new Error('token_expired'); }
+if (!res.ok) throw new Error('drive_' + res.status);
+return res;
+};
+
+const driveFindFile = async () => {
+if (drive.fileId) return drive.fileId;
+const q = encodeURIComponent("name='" + DRIVE_FILE + "'");
+const res = await driveFetch('https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&fields=files(id)&q=' + q);
+const json = await res.json();
+drive.fileId = (json.files && json.files[0] && json.files[0].id) || null;
+return drive.fileId;
+};
+
+const drivePull = async () => {
+const id = await driveFindFile();
+if (!id) return null;
+const res = await driveFetch('https://www.googleapis.com/drive/v3/files/' + id + '?alt=media');
+return res.json();
+};
+
+const drivePush = async () => {
+const body = JSON.stringify(state.data);
+const id = await driveFindFile();
+if (id) {
+await driveFetch('https://www.googleapis.com/upload/drive/v3/files/' + id + '?uploadType=media', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body });
+return;
+}
+const b = 'looplive_boundary';
+const meta = { name: DRIVE_FILE, parents: ['appDataFolder'], mimeType: 'application/json' };
+const multipart = '--' + b + '\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n' + JSON.stringify(meta) + '\r\n--' + b + '\r\nContent-Type: application/json\r\n\r\n' + body + '\r\n--' + b + '--';
+const res = await driveFetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id', { method: 'POST', headers: { 'Content-Type': 'multipart/related; boundary=' + b }, body: multipart });
+drive.fileId = (await res.json()).id;
+};
+
+// Newest copy wins. On a fresh install the Drive copy is newer than the empty local one, so it is restored.
+const driveSync = async () => {
+if (!driveConfigured() || !driveLinked()) return;
+if (drive.busy) { drive.again = true; return; }
+drive.busy = true;
+setDriveStatus('syncing');
+try {
+const remote = await drivePull();
+if (remote && Number(remote.updatedAt) > state.data.updatedAt) {
+state.data = normalizePresets(remote);
+try { localStorage.setItem(PRESET_KEY, JSON.stringify(state.data)); } catch (e) {}
+if (!state.isTyping) render();
+} else if (!remote || Number(remote.updatedAt) < state.data.updatedAt) {
+await drivePush();
+}
+drive.lastSynced = new Date();
+setDriveStatus('synced');
+} catch (e) {
+const m = e && e.message;
+if (['interaction_required', 'popup_failed_to_open', 'popup_closed', 'token_expired', 'access_denied', 'login_required'].includes(m)) {
+setDriveStatus('needs-signin');
+armSigninOnTap();
+} else {
+setDriveStatus('error');
+}
+} finally {
+drive.busy = false;
+if (drive.again) { drive.again = false; scheduleDrivePush(); }
+}
+};
+
+const scheduleDrivePush = () => {
+if (!driveLinked() || !driveConfigured()) return;
+clearTimeout(drive.timer);
+drive.timer = setTimeout(driveSync, 1500);
+};
+
+// Browsers only allow the sign-in popup after a tap, so if silent sign-in was blocked, retry on the next tap.
+let tapArmed = false;
+const armSigninOnTap = () => {
+if (tapArmed) return;
+tapArmed = true;
+document.addEventListener('pointerdown', () => { tapArmed = false; if (drive.status === 'needs-signin') driveSync(); }, { once: true });
+};
+
+window.connectDrive = async () => {
+if (!driveConfigured()) { setDriveStatus('not-configured'); return; }
+try {
+setDriveStatus('connecting');
+await driveToken(true);
+try { localStorage.setItem(DRIVE_LINK_KEY, '1'); } catch (e) {}
+await driveSync();
+} catch (e) {
+setDriveStatus(driveLinked() ? 'needs-signin' : 'off', driveLinked() ? '' : 'Sign-in was cancelled or blocked. Try again.');
+}
+};
+
+window.disconnectDrive = () => {
+clearTimeout(drive.timer);
+try { if (drive.token && window.google && google.accounts) google.accounts.oauth2.revoke(drive.token); } catch (e) {}
+drive.token = null;
+drive.fileId = null;
+try { localStorage.removeItem(DRIVE_LINK_KEY); } catch (e) {}
+setDriveStatus('off', 'Off. Your Drive backup is kept.');
+};
+
+// The one on/off control for Drive Sync (menu only)
+window.toggleDriveSync = () => (driveLinked() ? window.disconnectDrive() : window.connectDrive());
+
+const initDrive = () => {
+if (driveConfigured() && driveLinked()) driveSync();
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') driveSync(); });
+window.addEventListener('online', () => driveSync());
+};
+
+// ---------- Presets page ----------
+const switchHtml = (on, label, handler) => `<button role="switch" aria-checked="${on}" aria-label="${escapeHtml(label)}" onclick="${handler}"
+class="relative flex-none w-12 h-7 rounded-full transition-colors ${on ? 'bg-blue-500' : 'bg-slate-300'}">
+<span class="absolute top-0.5 left-0.5 w-6 h-6 bg-white rounded-full shadow transition-transform ${on ? 'translate-x-5' : ''}"></span>
+</button>`;
+
+const taskCardHtml = (pid, task) => `
+<div class="border border-slate-200 rounded-xl p-4" style="border-left: 4px solid ${task.color}">
+<div class="flex items-start gap-3">
+<div class="flex-1 min-w-0">
+<input type="text"
+id="task-name-${pid}-${task.id}"
+value="${escapeHtml(task.name)}"
+aria-label="Task name"
+onfocus="handleInputFocus()"
+onblur="handleInputBlur()"
+oninput="updateTaskSilent('${pid}', ${task.id}, 'name', this.value)"
+class="text-lg font-semibold text-slate-800 bg-transparent border-b-2 border-transparent hover:border-slate-200 focus:border-blue-500 focus:outline-none w-full mb-2">
+
+<div class="grid grid-cols-2 gap-3">
+<div>
+<label class="block text-xs text-slate-500 mb-1">Start</label>
+<input type="time" value="${task.start}"
+onfocus="handleInputFocus()" onblur="handleInputBlur()"
+onchange="updateTask('${pid}', ${task.id}, 'start', this.value)"
+class="w-full text-sm text-slate-700 bg-slate-50 border border-slate-200 rounded px-2 py-1.5 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500">
+</div>
+<div>
+<label class="block text-xs text-slate-500 mb-1">End</label>
+<input type="time" value="${task.end}"
+onfocus="handleInputFocus()" onblur="handleInputBlur()"
+onchange="updateTask('${pid}', ${task.id}, 'end', this.value)"
+class="w-full text-sm text-slate-700 bg-slate-50 border border-slate-200 rounded px-2 py-1.5 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500">
+</div>
+</div>
+
+<div class="flex flex-wrap gap-1.5 mt-3">
+${colors.map(color => `
+<button onclick="updateTask('${pid}', ${task.id}, 'color', '${color}')" aria-label="Colour ${color}"
+class="w-6 h-6 rounded-md transition-all ${task.color === color ? 'ring-2 ring-slate-800 ring-offset-2 scale-110' : 'hover:scale-105'}"
+style="background-color: ${color}"></button>
+`).join('')}
+</div>
+</div>
+
+<button onclick="deleteTask('${pid}', ${task.id})" aria-label="Delete task" class="text-slate-400 hover:text-red-500 transition-colors">
+${TrashIcon()}
+</button>
+</div>
+</div>`;
+
+const addTaskFormHtml = (pid) => {
+const nt = state.newTasks[pid];
+return `
+<div class="border-2 border-dashed border-slate-300 rounded-xl p-4">
+<h3 class="text-base font-semibold text-slate-800 mb-3">Add new task</h3>
+<div class="space-y-3">
+<input type="text" value="${escapeHtml(nt.name)}" placeholder="Task name" aria-label="New task name"
+onfocus="handleInputFocus()" onblur="handleInputBlur()"
+oninput="state.newTasks['${pid}'].name = this.value"
+class="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+
+<div class="grid grid-cols-2 gap-3">
+<input type="time" value="${nt.start}" aria-label="New task start"
+onfocus="handleInputFocus()" onblur="handleInputBlur()"
+onchange="state.newTasks['${pid}'].start = this.value"
+class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+<input type="time" value="${nt.end}" aria-label="New task end"
+onfocus="handleInputFocus()" onblur="handleInputBlur()"
+onchange="state.newTasks['${pid}'].end = this.value"
+class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+</div>
+
+<div class="flex flex-wrap gap-2">
+${colors.map(color => `
+<button onclick="state.newTasks['${pid}'].color = '${color}'; render();" aria-label="Colour ${color}"
+class="w-8 h-8 rounded-lg ${nt.color === color ? 'ring-2 ring-slate-800 ring-offset-2' : ''}"
+style="background-color: ${color}"></button>
+`).join('')}
+</div>
+
+<button onclick="addTask('${pid}')" class="w-full bg-blue-500 hover:bg-blue-600 text-white py-2 rounded-lg font-medium transition-colors flex items-center justify-center gap-2">
+${PlusIcon()}
+<span>Add task</span>
+</button>
+</div>
+</div>`;
+};
+
+const presetColumnHtml = (pid) => {
+const on = state.data.activeId === pid;
+const preset = state.data.presets[pid];
+return `
+<section class="bg-white rounded-2xl shadow-lg p-5" aria-label="${PRESET_TITLES[pid]}">
+<div class="flex items-center justify-between mb-4">
+<h2 class="text-xl font-bold text-slate-800">${PRESET_TITLES[pid]}</h2>
+<div class="flex items-center gap-2">
+<span class="text-sm ${on ? 'text-blue-600 font-medium' : 'text-slate-500'}">${on ? 'On' : 'Off'}</span>
+${switchHtml(on, 'Turn ' + PRESET_TITLES[pid] + ' on or off', "togglePreset('" + pid + "')")}
+</div>
+</div>
+<div class="space-y-4 mb-5">
+${preset.tasks.map(task => taskCardHtml(pid, task)).join('')}
+</div>
+${addTaskFormHtml(pid)}
+</section>`;
+};
+
+const presetsPageHtml = () => `
+<div class="text-center mb-6">
+<p class="text-slate-600 text-sm">Turn a preset on to show it on the dashboard. Only one can be on at a time.</p>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
+${PRESET_IDS.map(presetColumnHtml).join('')}
+</div>`;
+
+// Main render
+const render = () => {
+const root = document.getElementById('root');
+const currentDate = formatDateLine(state.currentTime);
+
+root.innerHTML = `
+<!-- Menu Backdrop -->
+<div class="menu-backdrop ${state.menuOpen ? 'open' : ''}" onclick="toggleMenu()"></div>
+
+<!-- Sidebar Menu -->
+<div class="menu-overlay ${state.menuOpen ? 'open' : ''}">
+<div class="p-6">
+<div class="flex items-center justify-between mb-6">
+<h2 class="text-xl font-bold text-slate-800">Menu</h2>
+<button onclick="toggleMenu()" class="text-slate-600 hover:text-slate-800">
+${XIcon()}
+</button>
+</div>
+
+<nav class="space-y-2">
+<button onclick="navTo('dashboard')" class="w-full text-left px-4 py-3 rounded-lg ${state.view === 'dashboard' ? 'bg-blue-50 text-blue-600' : 'text-slate-700 hover:bg-slate-50'}">
+Dashboard
+</button>
+<button onclick="navTo('presets')" class="w-full text-left px-4 py-3 rounded-lg ${state.view === 'presets' ? 'bg-blue-50 text-blue-600' : 'text-slate-700 hover:bg-slate-50'}">
+Presets
+</button>
+<div id="drive-menu-item" class="px-4 py-3 rounded-lg">${driveRowInner()}</div>
+</nav>
+</div>
+</div>
+
+<!-- Main Content -->
+<div class="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
+<div class="max-w-6xl mx-auto p-4 md:p-8">
+<!-- Header -->
+<div class="flex items-center justify-between mb-4">
+<button onclick="toggleMenu()" class="p-2 hover:bg-white rounded-lg transition-colors">
+${MenuIcon()}
+</button>
+<div class="flex-1 flex items-center justify-center gap-3">
+<img src="/favicon-96x96.png" alt="" class="w-9 h-9 md:w-11 md:h-11 rounded-xl">
+<h1 class="text-3xl md:text-4xl font-bold text-slate-800">LoopLive</h1>
+</div>
+<div class="w-10"></div>
+</div>
+
+${state.view === 'dashboard' ? `<div class="text-center mb-6">
+<p id="date-line" class="text-slate-600 text-sm">${currentDate}</p>
+</div>` : ''}
+
+${state.view === 'presets' ? presetsPageHtml() : `
+<!-- Dashboard View -->
+<!-- Circular Timeline -->
+<div class="flex justify-center mb-8">
+<div id="circle-container" class="bg-white rounded-3xl shadow-lg p-8">
+${renderCircularTimeline()}
+</div>
+</div>
+
+<!-- Pomodoro Timers -->
+<div class="grid grid-cols-2 gap-4 max-w-md mx-auto">
+<!-- Focus Timer -->
+<div class="bg-white rounded-2xl shadow-lg p-4">
+<h3 class="text-sm font-semibold text-slate-800 mb-3 text-center flex items-center justify-center gap-2">
+<span class="w-2 h-2 bg-blue-500 rounded-full"></span>
+Focus (25min)
+</h3>
+<div id="focus-timer-content">
+${(() => {
+const progress = ((state.focusTimer.totalSeconds - state.focusTimer.remainingSeconds) / state.focusTimer.totalSeconds) * 100;
+return `
+<div class="text-center mb-3">
+<div class="text-3xl font-bold ${state.focusTimer.isRunning ? 'text-blue-600' : 'text-slate-700'}">
+${formatTimerDisplay(state.focusTimer.remainingSeconds)}
+</div>
+<div class="text-xs text-slate-500 mt-1">Cycles: ${state.focusTimer.completedCycles}</div>
+</div>
+<div class="w-full bg-slate-200 rounded-full h-1.5 mb-3">
+<div class="bg-blue-500 h-1.5 rounded-full transition-all" style="width: ${progress}%"></div>
+</div>
+<div class="flex gap-2">
+<button onclick="toggleFocusTimer()" class="flex-1 py-2 rounded-lg text-sm font-medium transition-all ${state.focusTimer.isRunning ? 'bg-slate-200 hover:bg-slate-300 text-slate-800' : 'bg-blue-500 hover:bg-blue-600 text-white'} flex items-center justify-center gap-1">
+${state.focusTimer.isRunning ? PauseIcon() : PlayIcon()}
+</button>
+<button onclick="resetFocusTimer()" class="px-3 py-2 rounded-lg text-sm font-medium bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center">
+${ResetIcon()}
+</button>
+</div>
+`;
+})()}
+</div>
+</div>
+
+<!-- Break Timer -->
+<div class="bg-white rounded-2xl shadow-lg p-4">
+<h3 class="text-sm font-semibold text-slate-800 mb-3 text-center flex items-center justify-center gap-2">
+<span class="w-2 h-2 bg-green-500 rounded-full"></span>
+Break (5min)
+</h3>
+<div id="break-timer-content">
+${(() => {
+const progress = ((state.breakTimer.totalSeconds - state.breakTimer.remainingSeconds) / state.breakTimer.totalSeconds) * 100;
+return `
+<div class="text-center mb-3">
+<div class="text-3xl font-bold ${state.breakTimer.isRunning ? 'text-green-600' : 'text-slate-700'}">
+${formatTimerDisplay(state.breakTimer.remainingSeconds)}
+</div>
+<div class="text-xs text-slate-500 mt-1">Cycles: ${state.breakTimer.completedCycles}</div>
+</div>
+<div class="w-full bg-slate-200 rounded-full h-1.5 mb-3">
+<div class="bg-green-500 h-1.5 rounded-full transition-all" style="width: ${progress}%"></div>
+</div>
+<div class="flex gap-2">
+<button onclick="toggleBreakTimer()" class="flex-1 py-2 rounded-lg text-sm font-medium transition-all ${state.breakTimer.isRunning ? 'bg-slate-200 hover:bg-slate-300 text-slate-800' : 'bg-green-500 hover:bg-green-600 text-white'} flex items-center justify-center gap-1">
+${state.breakTimer.isRunning ? PauseIcon() : PlayIcon()}
+</button>
+<button onclick="resetBreakTimer()" class="px-3 py-2 rounded-lg text-sm font-medium bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center">
+${ResetIcon()}
+</button>
+</div>
+`;
+})()}
+</div>
+</div>
+</div>
+`}
+</div>
+</div>
+`;
+};
+
+// Initialize
+render();
+initDrive();
+
+if ('serviceWorker' in navigator) {
+window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => {}));
+}
+
+// Timer tick (every second)
+setInterval(() => {
+state.currentTime = new Date();
+const dateEl = document.getElementById('date-line');
+if (dateEl) dateEl.textContent = formatDateLine(state.currentTime);
+
+// Update focus timer
+if (state.focusTimer.isRunning) {
+state.focusTimer.remainingSeconds--;
+if (state.focusTimer.remainingSeconds <= 0) {
+state.focusTimer.remainingSeconds = 0;
+state.focusTimer.isRunning = false;
+state.focusTimer.completedCycles++;
+setTimeout(() => {
+state.focusTimer.remainingSeconds = state.focusTimer.totalSeconds;
+saveState();
+updateTimersOnly();
+}, 1000);
+}
+saveState();
+}
+
+// Update break timer
+if (state.breakTimer.isRunning) {
+state.breakTimer.remainingSeconds--;
+if (state.breakTimer.remainingSeconds <= 0) {
+state.breakTimer.remainingSeconds = 0;
+state.breakTimer.isRunning = false;
+state.breakTimer.completedCycles++;
+setTimeout(() => {
+state.breakTimer.remainingSeconds = state.breakTimer.totalSeconds;
+saveState();
+updateTimersOnly();
+}, 1000);
+}
+saveState();
+}
+
+// Update displays
+if (!state.isTyping && !state.menuOpen) {
+updateCircleOnly();
+updateTimersOnly();
+}
+}, 1000);
+</script>
+</body>
+</html>
